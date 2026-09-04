@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Price Rounder",
+  "version": "1.0",
+  "description": "Automatically rounds all prices on websites to the nearest whole number",
+  "permissions": [],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_end"
+    }
+  ]
+}
