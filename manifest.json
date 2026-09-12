@@ -3,7 +3,13 @@
   "name": "Price Rounder",
   "version": "1.0",
   "description": "Automatically rounds all prices on websites to the nearest whole number",
-  "permissions": [],
+  "permissions": [
+    "storage"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Price Rounder"
+  },
   "content_scripts": [
     {
       "matches": ["<all_urls>"],

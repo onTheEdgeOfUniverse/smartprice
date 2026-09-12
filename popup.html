@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Price Rounder</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <div class="logo">
+        <span class="currency-symbol">₹</span>
+      </div>
+      <div>
+        <h1 class="title">Price Rounder</h1>
+        <p class="subtitle">Select your price display style</p>
+      </div>
+    </header>
+
+    <div class="modes">
+      <!-- Round Option -->
+      <label class="mode-card" for="mode-round">
+        <input type="radio" id="mode-round" name="roundingMode" value="round">
+        <div class="card-content">
+          <div class="card-header">
+            <span class="mode-name">Round</span>
+            <span class="badge standard-badge">Standard</span>
+          </div>
+          <p class="card-desc">Rounds to nearest readable whole number</p>
+          <div class="example-box">
+            <span class="original-val">₹2,899</span>
+            <span class="arrow">→</span>
+            <span class="preview-val">₹2,900</span>
+          </div>
+        </div>
+      </label>
+
+      <!-- Round++ Option -->
+      <label class="mode-card" for="mode-round-plus">
+        <input type="radio" id="mode-round-plus" name="roundingMode" value="round_plus">
+        <div class="card-content">
+          <div class="card-header">
+            <span class="mode-name">Round++</span>
+            <span class="badge plus-badge">Compact</span>
+          </div>
+          <p class="card-desc">Short, compact notation using k, L, & Cr</p>
+          <div class="example-box">
+            <span class="original-val">₹2,899</span>
+            <span class="arrow">→</span>
+            <span class="preview-val highlight">₹2.9k</span>
+          </div>
+        </div>
+      </label>
+    </div>
+
+    <footer class="footer">
+      <div class="status-indicator">
+        <span class="status-dot"></span>
+        <span id="status-text">Active & synced across tabs</span>
+      </div>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Price Rounder Test Page</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      padding: 30px;
+      background: #f1f5f9;
+      color: #0f172a;
+    }
+    h1 { margin-bottom: 8px; }
+    p.lead { color: #64748b; margin-bottom: 24px; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+      max-width: 900px;
+    }
+    .product-card {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+    }
+    .product-title {
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+    .price-tag {
+      font-size: 22px;
+      font-weight: 700;
+      color: #16a34a;
+    }
+    .composite-price {
+      display: inline-flex;
+      align-items: baseline;
+    }
+    .symbol { font-size: 18px; font-weight: 600; color: #16a34a; }
+    .whole { font-size: 24px; font-weight: 700; color: #16a34a; }
+    .decimal { font-size: 14px; font-weight: 500; color: #64748b; }
+    .note {
+      font-size: 12px;
+      color: #94a3b8;
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Price Rounder Test Playground</h1>
+  <p class="lead">Open this file in your browser with the Price Rounder extension loaded to see live formatting in action.</p>
+
+  <div class="grid">
+    <div class="product-card">
+      <div class="product-title">Headphones (Target: ₹2,899 → 2.9k)</div>
+      <div class="price-tag">₹2,899</div>
+      <div class="note">Single node format</div>
+    </div>
+
+    <div class="product-card">
+      <div class="product-title">Mechanical Keyboard</div>
+      <div class="price-tag">₹1,249</div>
+      <div class="note">Single node format</div>
+    </div>
+
+    <div class="product-card">
+      <div class="product-title">Smartphone (Amazon style composite)</div>
+      <div class="composite-price">
+        <span class="symbol">₹</span>
+        <span class="whole">24,999</span>
+        <span class="decimal">.00</span>
+      </div>
+      <div class="note">Composite span layout</div>
+    </div>
+
+    <div class="product-card">
+      <div class="product-title">Gaming Laptop</div>
+      <div class="price-tag">₹ 1,19,990</div>
+      <div class="note">High value (Lakh tier)</div>
+    </div>
+
+    <div class="product-card">
+      <div class="product-title">Coffee Mug</div>
+      <div class="price-tag">Rs. 349</div>
+      <div class="note">Rs prefix format</div>
+    </div>
+
+    <div class="product-card">
+      <div class="product-title">Annual Subscription</div>
+      <div class="price-tag">999 INR</div>
+      <div class="note">INR suffix format</div>
+    </div>
+  </div>
+</body>
+</html>

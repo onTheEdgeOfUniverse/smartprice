@@ -59,6 +59,74 @@
     return [...groups, last3].join(',');
   }
 
+  // ─── Compact formatting for Round++ mode ─────────────────────────────────────
+  // 2899 → "2.9k"   24999 → "25k"   119990 → "1.2L"
+  function formatCompactINR(n) {
+    if (isNaN(n) || n <= 0) return String(n);
+    if (n < 995) {
+      return formatINR(smartRound(n));
+    }
+    if (n < 99500) {
+      const k = Math.round((n / 1000) * 10) / 10;
+      return `${k}k`;
+    }
+    if (n < 99500000) {
+      const l = Math.round((n / 100000) * 10) / 10;
+      return `${l}L`;
+    }
+    const cr = Math.round((n / 10000000) * 10) / 10;
+    return `${cr}Cr`;
+  }
+
+  // Unified price formatter based on current active mode
+  let currentMode = 'round'; // 'round' or 'round_plus'
+
+  function formatPrice(n, mode = currentMode) {
+    if (mode === 'round_plus') {
+      return formatCompactINR(n);
+    }
+    return formatINR(smartRound(n));
+  }
+
+  // Tracking maps for live reversible mode switching
+  const trackedSingleNodes = new Map();     // Node -> { originalText }
+  const trackedCompositeElements = new Map(); // Element -> Array<{ node, originalValue }>
+
+  function applyMode(newMode) {
+    if (!newMode || newMode === currentMode) return;
+    log('switching mode from', currentMode, 'to', newMode);
+    currentMode = newMode;
+
+    // 1. Revert single nodes to original text
+    for (const [node, info] of trackedSingleNodes.entries()) {
+      if (!node.isConnected) {
+        trackedSingleNodes.delete(node);
+        continue;
+      }
+      node.nodeValue = info.originalText;
+      seen.delete(node);
+    }
+
+    // 2. Revert composite elements to original values
+    for (const [el, snapshot] of trackedCompositeElements.entries()) {
+      if (!el.isConnected) {
+        trackedCompositeElements.delete(el);
+        continue;
+      }
+      for (const item of snapshot) {
+        if (item.node.isConnected) {
+          item.node.nodeValue = item.originalValue;
+          seen.delete(item.node);
+        }
+      }
+      processedEls.delete(el);
+    }
+
+    // 3. Re-scan document to apply new formatting
+    walk(document.body);
+  }
+
+
   // ─── Generic composite-span price handling ───────────────────────────────────
   //
   // The core idea:
@@ -166,12 +234,11 @@
 
     const { composite, map } = buildComposite(nodes);
 
-    // Snapshot to detect change
-    const snapshot = composite;
+    // Snapshot nodes before modifying for potential mode reversal
+    const nodeSnapshots = nodes.map((n) => ({ node: n, originalValue: n.nodeValue }));
 
     INR_RE.lastIndex = 0;
     let anyChange = false;
-    let result = composite;
 
     // We need to iterate matches on the *original* composite because rewriting
     // nodes changes nodeValue but not our map. Collect all matches first.
@@ -184,9 +251,9 @@
       const numStr = nm[1];
       const original = parseINR(numStr);
       if (isNaN(original) || original === 0) continue;
-      const rounded = smartRound(original);
-      if (rounded === original) continue;
-      matches.push({ matchStart: m.index, matchStr: m[0], numStr, formatted: formatINR(rounded) });
+      const formatted = formatPrice(original, currentMode);
+      if (formatted === numStr) continue;
+      matches.push({ matchStart: m.index, matchStr: m[0], numStr, formatted });
     }
 
     // Apply in reverse order so earlier offsets stay valid
@@ -199,6 +266,9 @@
     if (anyChange) {
       log('processElement done, matches:', matches.length);
       processedEls.add(el);
+      if (!trackedCompositeElements.has(el)) {
+        trackedCompositeElements.set(el, nodeSnapshots);
+      }
     }
   }
 
@@ -214,17 +284,22 @@
     INR_RE.lastIndex = 0;
     if (INR_RE.test(text)) {
       INR_RE.lastIndex = 0;
+      let hasChange = false;
       const next = text.replace(INR_RE, (match) => {
         const nm = match.match(NUM_RE);
         if (!nm) return match;
         const original = parseINR(nm[1]);
         if (isNaN(original) || original === 0) return match;
-        const rounded = smartRound(original);
-        if (rounded === original) return match;
-        return match.replace(nm[1], formatINR(rounded));
+        const formatted = formatPrice(original, currentMode);
+        if (formatted === nm[1]) return match;
+        hasChange = true;
+        return match.replace(nm[1], formatted);
       });
-      if (next !== text) {
+      if (hasChange && next !== text) {
         log(text.trim(), '→', next.trim());
+        if (!trackedSingleNodes.has(node)) {
+          trackedSingleNodes.set(node, { originalText: text });
+        }
         node.nodeValue = next;
         seen.set(node, next);
         return;
@@ -304,7 +379,7 @@
 
   // ─── Init ─────────────────────────────────────────────────────────────────────
   function init() {
-    log('init');
+    log('init with mode:', currentMode);
     walk(document.body);
     observe();
 
@@ -314,42 +389,86 @@
     setTimeout(() => walk(document.body), 5000);
   }
 
+  // Load mode from storage & set up listeners
+  function start() {
+    const storage = typeof chrome !== 'undefined' && chrome.storage && (chrome.storage.sync || chrome.storage.local);
+    if (storage) {
+      storage.get({ priceRounderMode: 'round' }, (result) => {
+        currentMode = result.priceRounderMode || 'round';
+        init();
+      });
+    } else {
+      init();
+    }
+
+    // Listen for storage changes across tabs
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged) {
+      chrome.storage.onChanged.addListener((changes) => {
+        if (changes.priceRounderMode) {
+          applyMode(changes.priceRounderMode.newValue);
+        }
+      });
+    }
+
+    // Listen for direct messages from popup
+    if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
+      chrome.runtime.onMessage.addListener((msg) => {
+        if (msg.action === 'UPDATE_PRICE_MODE') {
+          applyMode(msg.mode);
+        }
+      });
+    }
+  }
+
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
+    document.addEventListener('DOMContentLoaded', start);
   } else {
-    init();
+    start();
   }
 
   // ─── Console test harness: call window.__INRRounder.test() ───────────────────
   function test() {
     const cases = [
-      '₹1,234.50',          // → ₹1,200
-      '₹999',               // → ₹1,000
-      '₹49',                // → ₹50
-      '₹7.5',               // → ₹8
-      'Rs.1,23,456',        // → Rs.1,23,000
-      '24,999 INR',         // → 25,000 INR
-      '₹ 1,19,990',         // → ₹ 1,20,000
-      '₹0.99',              // → ₹1
+      '₹1,234.50',          // Round: ₹1,200 | Round++: ₹1.2k
+      '₹999',               // Round: ₹1,000 | Round++: ₹1k
+      '₹49',                // Round: ₹50    | Round++: ₹50
+      '₹7.5',               // Round: ₹8     | Round++: ₹8
+      'Rs.1,23,456',        // Round: Rs.1,23,000 | Round++: Rs.1.2L
+      '24,999 INR',         // Round: 25,000 INR  | Round++: 25k INR
+      '₹ 1,19,990',         // Round: ₹ 1,20,000  | Round++: ₹ 1.2L
+      '₹ 2,899',            // Round: ₹ 2,900     | Round++: ₹ 2.9k
+      '₹0.99',              // Round: ₹1     | Round++: ₹1
       'version v1.2.3',     // no change
       'park / kr / word',   // no change
     ];
 
-    console.group('[INRRounder] Tests');
-    for (const c of cases) {
-      INR_RE.lastIndex = 0;
-      const out = c.replace(INR_RE, (match) => {
-        const nm = match.match(NUM_RE);
-        if (!nm) return match;
-        const n = parseINR(nm[1]);
-        const r = smartRound(n);
-        return r === n ? match : match.replace(nm[1], formatINR(r));
-      });
-      console.log(c === out ? '  (no change)' : `  ✓`, c, '→', out);
-    }
-    console.groupEnd();
+    ['round', 'round_plus'].forEach((m) => {
+      console.group(`[INRRounder] Tests (${m} mode)`);
+      for (const c of cases) {
+        INR_RE.lastIndex = 0;
+        const out = c.replace(INR_RE, (match) => {
+          const nm = match.match(NUM_RE);
+          if (!nm) return match;
+          const n = parseINR(nm[1]);
+          if (isNaN(n) || n === 0) return match;
+          const formatted = formatPrice(n, m);
+          return formatted === nm[1] ? match : match.replace(nm[1], formatted);
+        });
+        console.log(c === out ? '  (no change)' : `  ✓`, c, '→', out);
+      }
+      console.groupEnd();
+    });
   }
 
-  window.__INRRounder = { test, parseINR, smartRound, formatINR };
+  window.__INRRounder = {
+    test,
+    parseINR,
+    smartRound,
+    formatINR,
+    formatCompactINR,
+    formatPrice,
+    getMode: () => currentMode,
+    setMode: applyMode
+  };
   log('loaded');
 })();
