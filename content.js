@@ -11,15 +11,15 @@
   // Does NOT match version strings (1.2.3) or plain numbers with no currency marker.
   const INR_RE = new RegExp(
     '(?:₹\\s*|(?:Rs\\.?|INR)\\s*)' +       // prefix: ₹ / Rs. / Rs / INR
-    '([0-9]{1,3}(?:[,][0-9]{3})*(?:[.][0-9]{1,2})?)' + // number
+    '([0-9]{1,3}(?:[,][0-9]{2,3})*(?:[.][0-9]{1,2})?)' + // number
     '|' +
-    '([0-9]{1,3}(?:[,][0-9]{3})*(?:[.][0-9]{1,2})?)' + // number (suffix form)
+    '([0-9]{1,3}(?:[,][0-9]{2,3})*(?:[.][0-9]{1,2})?)' + // number (suffix form)
     '(?:\\s*(?:INR|Rs\\.?))(?![0-9])',       // suffix: INR / Rs. — not followed by digit
     'gi'
   );
 
   // Extracts the numeric part from a matched price string
-  const NUM_RE = /([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{1,2})?)/;
+  const NUM_RE = /([0-9]{1,3}(?:,[0-9]{2,3})*(?:\.[0-9]{1,2})?)/;
 
   // ─── Normalise Indian number format ──────────────────────────────────────────
   // Handles: 1,234  1,23,456  1,234.50
@@ -89,13 +89,113 @@
   }
 
   // Tracking maps for live reversible mode switching
-  const trackedSingleNodes = new Map();     // Node -> { originalText }
+  const trackedSingleNodes = new Map();     // Node -> { originalText, parentEl }
   const trackedCompositeElements = new Map(); // Element -> Array<{ node, originalValue }>
+
+  // ─── Floating Tooltip for Hover Reveal ────────────────────────────────────────
+  let tooltipEl = null;
+  let tooltipInitialized = false;
+
+  function getOrCreateTooltip() {
+    if (!tooltipEl && document.body) {
+      tooltipEl = document.createElement('div');
+      tooltipEl.id = 'price-rounder-tooltip';
+      tooltipEl.style.cssText = [
+        'position: fixed',
+        'z-index: 2147483647',
+        'background: #0f172a',
+        'color: #f8fafc',
+        'padding: 5px 10px',
+        'border-radius: 6px',
+        'font-size: 12px',
+        'font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        'font-weight: 600',
+        'line-height: 1.2',
+        'pointer-events: none',
+        'box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25)',
+        'border: 1px solid rgba(255, 255, 255, 0.15)',
+        'transition: opacity 0.12s ease-out, transform 0.12s ease-out',
+        'opacity: 0',
+        'transform: translateY(4px)',
+        'white-space: nowrap',
+        'display: none'
+      ].join(';');
+      document.body.appendChild(tooltipEl);
+    }
+    return tooltipEl;
+  }
+
+  function showTooltip(target, text) {
+    const tip = getOrCreateTooltip();
+    if (!tip) return;
+    tip.textContent = text;
+    tip.style.display = 'block';
+
+    const rect = target.getBoundingClientRect();
+    const tipRect = tip.getBoundingClientRect();
+
+    let top = rect.top - tipRect.height - 8;
+    let left = rect.left + (rect.width - tipRect.width) / 2;
+
+    if (top < 6) {
+      top = rect.bottom + 8;
+    }
+
+    if (left < 6) left = 6;
+    if (left + tipRect.width > window.innerWidth - 6) {
+      left = window.innerWidth - tipRect.width - 6;
+    }
+
+    tip.style.top = `${Math.round(top)}px`;
+    tip.style.left = `${Math.round(left)}px`;
+    requestAnimationFrame(() => {
+      tip.style.opacity = '1';
+      tip.style.transform = 'translateY(0)';
+    });
+  }
+
+  function hideTooltip() {
+    if (tooltipEl) {
+      tooltipEl.style.opacity = '0';
+      tooltipEl.style.transform = 'translateY(4px)';
+      setTimeout(() => {
+        if (tooltipEl && tooltipEl.style.opacity === '0') {
+          tooltipEl.style.display = 'none';
+        }
+      }, 150);
+    }
+  }
+
+  function initTooltipEvents() {
+    if (tooltipInitialized) return;
+    tooltipInitialized = true;
+
+    document.addEventListener('mouseover', (e) => {
+      const target = e.target && e.target.closest && e.target.closest('[data-price-rounder-original]');
+      if (target) {
+        const val = target.getAttribute('data-price-rounder-original');
+        if (val) showTooltip(target, val);
+      }
+    }, true);
+
+    document.addEventListener('mouseout', (e) => {
+      const target = e.target && e.target.closest && e.target.closest('[data-price-rounder-original]');
+      if (target) {
+        if (e.relatedTarget && target.contains(e.relatedTarget)) {
+          return;
+        }
+        hideTooltip();
+      }
+    }, true);
+
+    window.addEventListener('scroll', hideTooltip, { passive: true });
+  }
 
   function applyMode(newMode) {
     if (!newMode || newMode === currentMode) return;
     log('switching mode from', currentMode, 'to', newMode);
     currentMode = newMode;
+    hideTooltip();
 
     // 1. Revert single nodes to original text
     for (const [node, info] of trackedSingleNodes.entries()) {
@@ -104,6 +204,9 @@
         continue;
       }
       node.nodeValue = info.originalText;
+      if (info.parentEl) {
+        info.parentEl.removeAttribute('data-price-rounder-original');
+      }
       seen.delete(node);
     }
 
@@ -119,6 +222,7 @@
           seen.delete(item.node);
         }
       }
+      el.removeAttribute('data-price-rounder-original');
       processedEls.delete(el);
     }
 
@@ -269,6 +373,8 @@
       if (!trackedCompositeElements.has(el)) {
         trackedCompositeElements.set(el, nodeSnapshots);
       }
+      const actualText = matches.map((m) => m.matchStr.trim()).join(', ');
+      el.setAttribute('data-price-rounder-original', `Actual: ${actualText}`);
     }
   }
 
@@ -285,6 +391,7 @@
     if (INR_RE.test(text)) {
       INR_RE.lastIndex = 0;
       let hasChange = false;
+      const originalMatches = [];
       const next = text.replace(INR_RE, (match) => {
         const nm = match.match(NUM_RE);
         if (!nm) return match;
@@ -293,12 +400,17 @@
         const formatted = formatPrice(original, currentMode);
         if (formatted === nm[1]) return match;
         hasChange = true;
+        originalMatches.push(match.trim());
         return match.replace(nm[1], formatted);
       });
       if (hasChange && next !== text) {
         log(text.trim(), '→', next.trim());
+        const parentEl = (node.parentElement && node.parentElement !== document.body) ? node.parentElement : null;
+        if (parentEl && originalMatches.length > 0) {
+          parentEl.setAttribute('data-price-rounder-original', `Actual: ${originalMatches.join(', ')}`);
+        }
         if (!trackedSingleNodes.has(node)) {
-          trackedSingleNodes.set(node, { originalText: text });
+          trackedSingleNodes.set(node, { originalText: text, parentEl });
         }
         node.nodeValue = next;
         seen.set(node, next);
@@ -380,6 +492,7 @@
   // ─── Init ─────────────────────────────────────────────────────────────────────
   function init() {
     log('init with mode:', currentMode);
+    initTooltipEvents();
     walk(document.body);
     observe();
 
