@@ -513,15 +513,12 @@
   function start() {
     const url = window.location.href.toLowerCase();
     
-    // Only run on Google results
-    const isGoogle = url.includes('google.');
-    
     // Exclude checkout/cart/payment pages
     const checkoutKeywords = ['checkout', 'cart', 'basket', 'pay', 'billing', 'buy'];
     const isCheckout = checkoutKeywords.some(kw => url.includes(kw));
 
-    if (!isGoogle || isCheckout) {
-      log('SmartPrice: Extension disabled on this page (only runs on Google results, excluding checkout pages).');
+    if (isCheckout) {
+      log('SmartPrice: Extension disabled on checkout/cart pages to preserve exact amounts.');
       return;
     }
 

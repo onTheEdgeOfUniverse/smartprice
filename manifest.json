@@ -23,8 +23,7 @@
   "content_scripts": [
     {
       "matches": [
-        "*://*.google.com/*",
-        "*://*.google.co.in/*"
+        "<all_urls>"
       ],
       "js": ["content.js"],
       "run_at": "document_end"
