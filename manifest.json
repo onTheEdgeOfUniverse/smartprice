@@ -1,18 +1,31 @@
 {
   "manifest_version": 3,
-  "name": "Price Rounder",
-  "version": "1.0",
-  "description": "Automatically rounds all prices on websites to the nearest whole number",
+  "name": "SmartPrice Rounder",
+  "version": "1.1",
+  "description": "Automatically simplifies and rounds complex product prices on Google Shopping so you can compare costs at a glance.",
   "permissions": [
     "storage"
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Price Rounder"
+    "default_title": "SmartPrice Rounder",
+    "default_icon": {
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
+      "matches": [
+        "*://*.google.com/*",
+        "*://*.google.co.in/*"
+      ],
       "js": ["content.js"],
       "run_at": "document_end"
     }
