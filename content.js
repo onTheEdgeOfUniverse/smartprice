@@ -11,15 +11,17 @@
   // Does NOT match version strings (1.2.3) or plain numbers with no currency marker.
   const INR_RE = new RegExp(
     '(?:₹\\s*|(?:Rs\\.?|INR)\\s*)' +       // prefix: ₹ / Rs. / Rs / INR
-    '([0-9]{1,3}(?:[,][0-9]{2,3})*(?:[.][0-9]{1,2})?)' + // number
+    '(?:(?:[0-9]{1,3}(?:[,][0-9]{2,3})+|[0-9]+)(?:[.][0-9]{1,2})?)' + // number
+    '(?:\\s*[kKlLmMbB]+|\\s*Cr)?' + // optional suffix L, k, Cr, etc
+    '(?!\\w)' + // not followed by another letter/digit
     '|' +
-    '([0-9]{1,3}(?:[,][0-9]{2,3})*(?:[.][0-9]{1,2})?)' + // number (suffix form)
-    '(?:\\s*(?:INR|Rs\\.?))(?![0-9])',       // suffix: INR / Rs. — not followed by digit
+    '(?:(?:[0-9]{1,3}(?:[,][0-9]{2,3})+|[0-9]+)(?:[.][0-9]{1,2})?)' + // number (suffix form)
+    '(?:\\s*(?:INR|Rs\\.?))(?![0-9])',       // suffix: INR / Rs.
     'gi'
   );
 
   // Extracts the numeric part from a matched price string
-  const NUM_RE = /([0-9]{1,3}(?:,[0-9]{2,3})*(?:\.[0-9]{1,2})?)/;
+  const NUM_RE = /((?:[0-9]{1,3}(?:[,][0-9]{2,3})+|[0-9]+)(?:\.[0-9]{1,2})?)/;
 
   // ─── Normalise Indian number format ──────────────────────────────────────────
   // Handles: 1,234  1,23,456  1,234.50
@@ -393,6 +395,11 @@
       let hasChange = false;
       const originalMatches = [];
       const next = text.replace(INR_RE, (match) => {
+        // If it already ends with L, k, M, B, Cr, skip re-rounding it to avoid corrupting it
+        if (/(?:\s*)(?:[kKlLmMbB]|Cr)(?:\s*)$/i.test(match)) {
+          return match;
+        }
+        
         const nm = match.match(NUM_RE);
         if (!nm) return match;
         const original = parseINR(nm[1]);
