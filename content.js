@@ -71,10 +71,10 @@
       return `${k}k`;
     }
     if (n < 99500000) {
-      const l = Math.round((n / 100000) * 10) / 10;
+      const l = Math.round((n / 100000) * 100) / 100;
       return `${l}L`;
     }
-    const cr = Math.round((n / 10000000) * 10) / 10;
+    const cr = Math.round((n / 10000000) * 100) / 100;
     return `${cr}Cr`;
   }
 
