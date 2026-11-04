@@ -329,11 +329,29 @@
     return true;
   }
 
+  // ─── Site Specific Scopes & Target Selectors ───────────────────────────────────
+  const isGoogle = typeof window !== 'undefined' && (
+    window.location.hostname.includes('google.') ||
+    window.location.hostname === 'google'
+  );
+
+  // Target selectors for product search cards on Google:
+  // 1. .pla-unit (PLA / shopping ad card)
+  // 2. [jsname="uc35if"] / .wOPJ9c (Google Shopping organic/stream product card)
+  const GOOGLE_PRODUCT_CARD_SELECTOR = '[jsname="uc35if"], .pla-unit, [class*="pla-unit"], .wOPJ9c, [data-ssid="pve-STREAM_PIU"]';
+
+  function isAllowedOnThisPage(node) {
+    if (!isGoogle) return true;
+    const el = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+    return Boolean(el && el.closest(GOOGLE_PRODUCT_CARD_SELECTOR));
+  }
+
   // ─── Process a container element (composite entry point) ─────────────────────
   const processedEls = new WeakSet();
 
   function processElement(el) {
     if (processedEls.has(el)) return;
+    if (!isAllowedOnThisPage(el)) return;
 
     const nodes = leafTextNodes(el);
     if (!nodes.length) return;
@@ -384,6 +402,7 @@
   const seen = new WeakMap();
 
   function processNode(node) {
+    if (!isAllowedOnThisPage(node)) return;
     const text = node.nodeValue;
     if (!text || !text.trim()) return;
     if (seen.get(node) === text) return;
@@ -446,7 +465,7 @@
 
   // ─── TreeWalker scan with batching ───────────────────────────────────────────
 
-  function walk(root) {
+  function walkTree(root) {
     if (!root) return;
     const walker = document.createTreeWalker(
       root,
@@ -468,10 +487,44 @@
     while ((node = walker.nextNode())) {
       processNode(node);
       if (++count >= BATCH) {
-        setTimeout(() => walk(root), 0);
+        setTimeout(() => walkTree(root), 0);
         return;
       }
     }
+  }
+
+  function walk(root) {
+    if (!root) return;
+    if (isGoogle) {
+      if (root === document.body) {
+        const cards = document.querySelectorAll(GOOGLE_PRODUCT_CARD_SELECTOR);
+        for (const card of cards) {
+          walkTree(card);
+        }
+        return;
+      }
+      if (root.nodeType === Node.ELEMENT_NODE) {
+        if (root.matches && root.matches(GOOGLE_PRODUCT_CARD_SELECTOR)) {
+          walkTree(root);
+          return;
+        }
+        if (root.closest && root.closest(GOOGLE_PRODUCT_CARD_SELECTOR)) {
+          walkTree(root);
+          return;
+        }
+        if (root.querySelectorAll) {
+          const cards = root.querySelectorAll(GOOGLE_PRODUCT_CARD_SELECTOR);
+          if (cards.length > 0) {
+            for (const card of cards) {
+              walkTree(card);
+            }
+            return;
+          }
+        }
+      }
+      return;
+    }
+    walkTree(root);
   }
 
   // ─── MutationObserver for dynamic content (SPA / infinite scroll) ─────────────
@@ -503,7 +556,7 @@
     walk(document.body);
     observe();
 
-    // Catch lazy-loaded prices (Flipkart, Amazon lazy sections, etc.)
+    // Catch lazy-loaded prices (Google shopping carousel, Flipkart, Amazon, etc.)
     setTimeout(() => walk(document.body), 800);
     setTimeout(() => walk(document.body), 2000);
     setTimeout(() => walk(document.body), 5000);
@@ -512,10 +565,19 @@
   // Load mode from storage & set up listeners
   function start() {
     const url = window.location.href.toLowerCase();
-    
+    const pathname = window.location.pathname.toLowerCase();
+    const hostname = window.location.hostname.toLowerCase();
+
     // Exclude checkout/cart/payment pages
-    const checkoutKeywords = ['checkout', 'cart', 'basket', 'pay', 'billing', 'buy'];
-    const isCheckout = checkoutKeywords.some(kw => url.includes(kw));
+    // Note: Do not disable on Google search pages (e.g. searching 'buy shoes' or 'best buy')
+    let isCheckout = false;
+    if (!(hostname.includes('google.') && pathname.startsWith('/search'))) {
+      const checkoutPatterns = [
+        '/checkout', '/cart', '/basket', '/billing', '/payment',
+        'checkout.', 'cart.', 'action=checkout', 'step=checkout', 'view=cart'
+      ];
+      isCheckout = checkoutPatterns.some(pattern => url.includes(pattern));
+    }
 
     if (isCheckout) {
       log('SmartPrice: Extension disabled on checkout/cart pages to preserve exact amounts.');
