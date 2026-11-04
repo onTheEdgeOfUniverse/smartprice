@@ -2,8 +2,8 @@
   "manifest_version": 3,
   "name": "CleanPrice: Shopping Price Rounder",
   "short_name": "CleanPrice",
-  "version": "1.6",
-  "description": "Automatically rounds deceptive shopping prices (.99, 999) to clean whole numbers on Amazon, Flipkart & Google Shopping.",
+  "version": "1.7",
+  "description": "Automatically rounds product prices on Amazon, Flipkart, and shopping sites to clean whole numbers for easier price comparison.",
   "permissions": [],
   "action": {
     "default_popup": "popup.html",
