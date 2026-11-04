@@ -94,110 +94,10 @@
   const trackedSingleNodes = new Map();     // Node -> { originalText, parentEl }
   const trackedCompositeElements = new Map(); // Element -> Array<{ node, originalValue }>
 
-  // ─── Floating Tooltip for Hover Reveal ────────────────────────────────────────
-  let tooltipEl = null;
-  let tooltipInitialized = false;
-
-  function getOrCreateTooltip() {
-    if (!tooltipEl && document.body) {
-      tooltipEl = document.createElement('div');
-      tooltipEl.id = 'price-rounder-tooltip';
-      tooltipEl.style.cssText = [
-        'position: fixed',
-        'z-index: 2147483647',
-        'background: #0f172a',
-        'color: #f8fafc',
-        'padding: 5px 10px',
-        'border-radius: 6px',
-        'font-size: 12px',
-        'font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-        'font-weight: 600',
-        'line-height: 1.2',
-        'pointer-events: none',
-        'box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25)',
-        'border: 1px solid rgba(255, 255, 255, 0.15)',
-        'transition: opacity 0.12s ease-out, transform 0.12s ease-out',
-        'opacity: 0',
-        'transform: translateY(4px)',
-        'white-space: nowrap',
-        'display: none'
-      ].join(';');
-      document.body.appendChild(tooltipEl);
-    }
-    return tooltipEl;
-  }
-
-  function showTooltip(target, text) {
-    const tip = getOrCreateTooltip();
-    if (!tip) return;
-    tip.textContent = text;
-    tip.style.display = 'block';
-
-    const rect = target.getBoundingClientRect();
-    const tipRect = tip.getBoundingClientRect();
-
-    let top = rect.top - tipRect.height - 8;
-    let left = rect.left + (rect.width - tipRect.width) / 2;
-
-    if (top < 6) {
-      top = rect.bottom + 8;
-    }
-
-    if (left < 6) left = 6;
-    if (left + tipRect.width > window.innerWidth - 6) {
-      left = window.innerWidth - tipRect.width - 6;
-    }
-
-    tip.style.top = `${Math.round(top)}px`;
-    tip.style.left = `${Math.round(left)}px`;
-    requestAnimationFrame(() => {
-      tip.style.opacity = '1';
-      tip.style.transform = 'translateY(0)';
-    });
-  }
-
-  function hideTooltip() {
-    if (tooltipEl) {
-      tooltipEl.style.opacity = '0';
-      tooltipEl.style.transform = 'translateY(4px)';
-      setTimeout(() => {
-        if (tooltipEl && tooltipEl.style.opacity === '0') {
-          tooltipEl.style.display = 'none';
-        }
-      }, 150);
-    }
-  }
-
-  function initTooltipEvents() {
-    if (tooltipInitialized) return;
-    tooltipInitialized = true;
-
-    document.addEventListener('mouseover', (e) => {
-      const target = e.target && e.target.closest && e.target.closest('[data-price-rounder-original]');
-      if (target) {
-        const val = target.getAttribute('data-price-rounder-original');
-        if (val) showTooltip(target, val);
-      }
-    }, true);
-
-    document.addEventListener('mouseout', (e) => {
-      const target = e.target && e.target.closest && e.target.closest('[data-price-rounder-original]');
-      if (target) {
-        if (e.relatedTarget && target.contains(e.relatedTarget)) {
-          return;
-        }
-        hideTooltip();
-      }
-    }, true);
-
-    window.addEventListener('scroll', hideTooltip, { passive: true });
-  }
-
   function applyMode(newMode) {
     if (!newMode || newMode === currentMode) return;
     log('switching mode from', currentMode, 'to', newMode);
     currentMode = newMode;
-    hideTooltip();
 
     // 1. Revert single nodes to original text
     for (const [node, info] of trackedSingleNodes.entries()) {
@@ -206,9 +106,6 @@
         continue;
       }
       node.nodeValue = info.originalText;
-      if (info.parentEl) {
-        info.parentEl.removeAttribute('data-price-rounder-original');
-      }
       seen.delete(node);
     }
 
@@ -224,7 +121,6 @@
           seen.delete(item.node);
         }
       }
-      el.removeAttribute('data-price-rounder-original');
       processedEls.delete(el);
     }
 
@@ -393,8 +289,6 @@
       if (!trackedCompositeElements.has(el)) {
         trackedCompositeElements.set(el, nodeSnapshots);
       }
-      const actualText = matches.map((m) => m.matchStr.trim()).join(', ');
-      el.setAttribute('data-price-rounder-original', `Actual: ${actualText}`);
     }
   }
 
@@ -432,9 +326,6 @@
       if (hasChange && next !== text) {
         log(text.trim(), '→', next.trim());
         const parentEl = (node.parentElement && node.parentElement !== document.body) ? node.parentElement : null;
-        if (parentEl && originalMatches.length > 0) {
-          parentEl.setAttribute('data-price-rounder-original', `Actual: ${originalMatches.join(', ')}`);
-        }
         if (!trackedSingleNodes.has(node)) {
           trackedSingleNodes.set(node, { originalText: text, parentEl });
         }
@@ -495,6 +386,7 @@
 
   function walk(root) {
     if (!root) return;
+    if (isCheckoutOrCartPage()) return;
     if (isGoogle) {
       if (root === document.body) {
         const cards = document.querySelectorAll(GOOGLE_PRODUCT_CARD_SELECTOR);
@@ -549,10 +441,92 @@
     });
   }
 
+  // ─── Checkout & Cart Exclusion ───────────────────────────────────────────────
+  function isCheckoutOrCartPage() {
+    if (typeof window === 'undefined' || !window.location) return false;
+    const url = window.location.href.toLowerCase();
+    const pathname = window.location.pathname.toLowerCase();
+    const hostname = window.location.hostname.toLowerCase();
+
+    // Never disable on Google search pages (e.g. searching 'buy shoes')
+    if (hostname.includes('google.') && pathname.startsWith('/search')) {
+      return false;
+    }
+
+    const checkoutPatterns = [
+      '/checkout', '/cart', '/basket', '/billing', '/payment',
+      'checkout.', 'cart.', 'action=checkout', 'step=checkout', 'view=cart'
+    ];
+    return checkoutPatterns.some(pattern => url.includes(pattern));
+  }
+
+  // ─── Shopping Site & Product Search Strategy ─────────────────────────────────
+  function isShoppingPage() {
+    if (typeof window === 'undefined' || !window.location) return false;
+    const hostname = window.location.hostname.toLowerCase();
+    const pathname = window.location.pathname.toLowerCase();
+    const href = window.location.href.toLowerCase();
+
+    // 0. Local test harness support (file:// or localhost test_page.html)
+    if (!hostname || hostname === 'localhost' || hostname === '127.0.0.1' || href.startsWith('file:')) {
+      return true;
+    }
+
+    // 1. Google: only valid on search / shopping
+    if (hostname.includes('google.')) {
+      return pathname.startsWith('/search') || pathname.startsWith('/shopping') || pathname.includes('shopping');
+    }
+
+    // 2. Well-known e-commerce & retail marketplaces / brand stores
+    const SHOPPING_DOMAINS = [
+      'amazon.', 'flipkart.com', 'myntra.com', 'meesho.com', 'ajio.com',
+      'nykaa.com', 'tatacliq.com', 'reliancedigital.in', 'croma.com',
+      'snapdeal.com', 'ebay.', 'etsy.com', 'aliexpress.com', 'walmart.com',
+      'target.com', 'bestbuy.com', 'one8.com', 'puma.com', 'nike.com',
+      'adidas.', 'boat-lifestyle.com', 'gonoise.com', 'noise.com',
+      'zara.com', 'hm.com', 'bewakoof.com', 'lenskart.com', 'firstcry.com',
+      'jiomart.com', 'blinkit.com', 'zeptonow.com', 'bigbasket.com',
+      'swiggy.com', 'zomato.com', 'shopify.com', 'myshopify.com'
+    ];
+    if (SHOPPING_DOMAINS.some(domain => hostname.includes(domain))) {
+      return true;
+    }
+
+    // 3. Product URL Keyword Strategy:
+    // Path indicates product detail page, product listing, catalog or shop
+    const PRODUCT_URL_PATTERNS = [
+      '/product/', '/products/', '/p/', '/dp/', '/gp/product/',
+      '/item/', '/items/', '/catalog/', '/goods/', '/buy/',
+      '/shop/', '/store/', '/collection/', '/collections/'
+    ];
+    if (PRODUCT_URL_PATTERNS.some(pat => pathname.includes(pat))) {
+      return true;
+    }
+
+    // 4. Schema.org / OpenGraph / Semantic Product Metadata Strategy:
+    if (document.querySelector('meta[property="og:type"][content*="product"], meta[property="product:price:amount"], meta[itemprop="price"], meta[property="og:price:amount"]')) {
+      return true;
+    }
+
+    const ldScripts = document.querySelectorAll('script[type="application/ld+json"]');
+    for (let i = 0; i < Math.min(ldScripts.length, 5); i++) {
+      const text = ldScripts[i].textContent || '';
+      if (text.includes('"Product"') || text.includes('"Offer"') || text.includes('"ItemPage"')) {
+        return true;
+      }
+    }
+
+    // 5. Add to Cart / Buy Now button presence
+    if (document.querySelector('[id*="add-to-cart"], [class*="add-to-cart"], [id*="buy-now"], [class*="buy-now"], [id*="addToCart"], [class*="addToCart"]')) {
+      return true;
+    }
+
+    return false;
+  }
+
   // ─── Init ─────────────────────────────────────────────────────────────────────
   function init() {
     log('init with mode:', currentMode);
-    initTooltipEvents();
     walk(document.body);
     observe();
 
@@ -564,23 +538,15 @@
 
   // Load mode from storage & set up listeners
   function start() {
-    const url = window.location.href.toLowerCase();
-    const pathname = window.location.pathname.toLowerCase();
-    const hostname = window.location.hostname.toLowerCase();
-
-    // Exclude checkout/cart/payment pages
-    // Note: Do not disable on Google search pages (e.g. searching 'buy shoes' or 'best buy')
-    let isCheckout = false;
-    if (!(hostname.includes('google.') && pathname.startsWith('/search'))) {
-      const checkoutPatterns = [
-        '/checkout', '/cart', '/basket', '/billing', '/payment',
-        'checkout.', 'cart.', 'action=checkout', 'step=checkout', 'view=cart'
-      ];
-      isCheckout = checkoutPatterns.some(pattern => url.includes(pattern));
+    // 1. Only run on shopping sites / product pages / Google shopping searches
+    if (!isShoppingPage()) {
+      log('PriceRounder: Not a shopping site or product search page. Skipping.');
+      return;
     }
 
-    if (isCheckout) {
-      log('SmartPrice: Extension disabled on checkout/cart pages to preserve exact amounts.');
+    // 2. Exclude checkout/cart/payment pages
+    if (isCheckoutOrCartPage()) {
+      log('PriceRounder: Disabled on checkout/cart pages to preserve exact amounts.');
       return;
     }
 

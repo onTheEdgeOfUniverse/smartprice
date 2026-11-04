@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "SmartPrice Rounder",
-  "version": "1.3",
+  "version": "1.4",
   "description": "Automatically simplifies and rounds complex product prices on Google Shopping so you can compare costs at a glance.",
   "permissions": [
     "storage"
