@@ -16,50 +16,25 @@
       </div>
     </header>
 
-    <div class="modes">
-      <!-- Round Option -->
-      <label class="mode-card" for="mode-round">
-        <input type="radio" id="mode-round" name="roundingMode" value="round">
-        <div class="card-content">
-          <div class="card-header">
-            <span class="mode-name">Round</span>
-            <span class="badge standard-badge">Standard</span>
-          </div>
-          <p class="card-desc">Rounds to nearest readable whole number</p>
-          <div class="example-box">
-            <span class="original-val">₹2,899</span>
-            <span class="arrow">→</span>
-            <span class="preview-val">₹2,900</span>
-          </div>
-        </div>
-      </label>
-
-      <!-- Round++ Option -->
-      <label class="mode-card" for="mode-round-plus">
-        <input type="radio" id="mode-round-plus" name="roundingMode" value="round_plus">
-        <div class="card-content">
-          <div class="card-header">
-            <span class="mode-name">Round++</span>
-            <span class="badge plus-badge">Compact</span>
-          </div>
-          <p class="card-desc">Short, compact notation using k, L, & Cr</p>
-          <div class="example-box">
-            <span class="original-val">₹2,899</span>
-            <span class="arrow">→</span>
-            <span class="preview-val highlight">₹2.9k</span>
-          </div>
-        </div>
-      </label>
+    <div class="status-card">
+      <div class="card-header">
+        <span class="mode-name">Auto-Rounding</span>
+        <span class="badge active-badge">Always Active</span>
+      </div>
+      <p class="card-desc">Automatically simplifies deceptive product prices (.99, 999) to clean whole numbers on shopping sites.</p>
+      <div class="example-box">
+        <span class="original-val">₹2,899</span>
+        <span class="arrow">→</span>
+        <span class="preview-val">₹2,900</span>
+      </div>
     </div>
 
     <footer class="footer">
       <div class="status-indicator">
         <span class="status-dot"></span>
-        <span id="status-text">Active & synced across tabs</span>
+        <span id="status-text">Active on shopping & search</span>
       </div>
     </footer>
   </div>
-
-  <script src="popup.js"></script>
 </body>
 </html>

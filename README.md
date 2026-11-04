@@ -2,24 +2,21 @@
 
 A lightweight Google Chrome Extension (Manifest V3) that counters deceptive psychological pricing (.99, 999) on e-commerce shopping websites by automatically rounding and simplifying product prices into cleaner, human-friendly formats.
 
-## Features & Modes
+## Features & Automatic Rounding
 
-Click the CleanPrice extension icon in your Chrome toolbar to open the settings popup and switch between:
-
-1. **Round (Standard)**:
-   - Rounds prices to the nearest readable whole number using tiered thresholds.
-   - Example: `₹2,899` → `₹2,900`, `₹349` → `₹350`, `₹24,999` → `₹25,000`.
-
-2. **Round++ (Compact)**:
-   - Formats prices using compact human-readable notation (`k`, `L`, `Cr`).
-   - Example: `₹2,899` → `₹2.9k`, `₹24,999` → `₹25k`, `₹1,19,990` → `₹1.2L`.
-
-Changes take effect live across all open tabs without requiring a page refresh!
+CleanPrice automatically rounds prices on e-commerce shopping websites to the nearest readable whole number:
+- **Automatic & Instant**: No configuration or mode switching required. Works out of the box.
+- **Tiered Smart Rounding**:
+  - `₹2,899` → `₹2,900`
+  - `₹349` → `₹350`
+  - `₹24,999` → `₹25,000`
+  - `₹1,19,990` → `₹1,20,000`
+  - `₹2,49,990` → `₹2,50,000`
 
 ## Built for Safe Shopping
 
-- **Smart E-Commerce Detection**: Only activates on shopping sites (Amazon, Flipkart, Myntra, Google Shopping, etc.) and product searches. Keeps non-shopping sites completely untouched.
-- **Checkout & Cart Protection**: Automatically bypasses rounding on checkout, billing, and cart pages to guarantee you always see the exact payment amount.
+- **Smart E-Commerce Keyword Detection**: Scans for keywords like `shop`, `cart`, `store`, `buy`, `product`, `item`, `deal`, `sale` across URLs, page elements, and content. Non-shopping sites remain completely untouched.
+- **Payment & Checkout Protection**: Automatically preserves exact pricing on checkout, billing, and payment screens.
 
 ## Installation & Testing
 

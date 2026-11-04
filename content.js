@@ -61,71 +61,9 @@
     return [...groups, last3].join(',');
   }
 
-  // ─── Compact formatting for Round++ mode ─────────────────────────────────────
-  // 2899 → "2.9k"   24999 → "25k"   119990 → "1.2L"
-  function formatCompactINR(n) {
-    if (isNaN(n) || n <= 0) return String(n);
-    if (n < 995) {
-      return formatINR(smartRound(n));
-    }
-    if (n < 99500) {
-      const k = Math.round((n / 1000) * 10) / 10;
-      return `${k}k`;
-    }
-    if (n < 99500000) {
-      const l = Math.round((n / 100000) * 100) / 100;
-      return `${l}L`;
-    }
-    const cr = Math.round((n / 10000000) * 100) / 100;
-    return `${cr}Cr`;
-  }
-
-  // Unified price formatter based on current active mode
-  let currentMode = 'round'; // 'round' or 'round_plus'
-
-  function formatPrice(n, mode = currentMode) {
-    if (mode === 'round_plus') {
-      return formatCompactINR(n);
-    }
+  // Single unified price formatter (Auto-rounds to nearest whole number)
+  function formatPrice(n) {
     return formatINR(smartRound(n));
-  }
-
-  // Tracking maps for live reversible mode switching
-  const trackedSingleNodes = new Map();     // Node -> { originalText, parentEl }
-  const trackedCompositeElements = new Map(); // Element -> Array<{ node, originalValue }>
-
-  function applyMode(newMode) {
-    if (!newMode || newMode === currentMode) return;
-    log('switching mode from', currentMode, 'to', newMode);
-    currentMode = newMode;
-
-    // 1. Revert single nodes to original text
-    for (const [node, info] of trackedSingleNodes.entries()) {
-      if (!node.isConnected) {
-        trackedSingleNodes.delete(node);
-        continue;
-      }
-      node.nodeValue = info.originalText;
-      seen.delete(node);
-    }
-
-    // 2. Revert composite elements to original values
-    for (const [el, snapshot] of trackedCompositeElements.entries()) {
-      if (!el.isConnected) {
-        trackedCompositeElements.delete(el);
-        continue;
-      }
-      for (const item of snapshot) {
-        if (item.node.isConnected) {
-          item.node.nodeValue = item.originalValue;
-          seen.delete(item.node);
-        }
-      }
-      processedEls.delete(el);
-    }
-
-    // 3. Re-scan document to apply new formatting
-    walk(document.body);
   }
 
 
@@ -254,9 +192,6 @@
 
     const { composite, map } = buildComposite(nodes);
 
-    // Snapshot nodes before modifying for potential mode reversal
-    const nodeSnapshots = nodes.map((n) => ({ node: n, originalValue: n.nodeValue }));
-
     INR_RE.lastIndex = 0;
     let anyChange = false;
 
@@ -271,7 +206,7 @@
       const numStr = nm[1];
       const original = parseINR(numStr);
       if (isNaN(original) || original === 0) continue;
-      const formatted = formatPrice(original, currentMode);
+      const formatted = formatPrice(original);
       if (formatted === numStr) continue;
       matches.push({ matchStart: m.index, matchStr: m[0], numStr, formatted });
     }
@@ -286,9 +221,6 @@
     if (anyChange) {
       log('processElement done, matches:', matches.length);
       processedEls.add(el);
-      if (!trackedCompositeElements.has(el)) {
-        trackedCompositeElements.set(el, nodeSnapshots);
-      }
     }
   }
 
@@ -306,7 +238,6 @@
     if (INR_RE.test(text)) {
       INR_RE.lastIndex = 0;
       let hasChange = false;
-      const originalMatches = [];
       const next = text.replace(INR_RE, (match) => {
         // If it already ends with L, k, M, B, Cr, skip re-rounding it to avoid corrupting it
         if (/(?:\s*)(?:[kKlLmMbB]|Cr)(?:\s*)$/i.test(match)) {
@@ -317,18 +248,13 @@
         if (!nm) return match;
         const original = parseINR(nm[1]);
         if (isNaN(original) || original === 0) return match;
-        const formatted = formatPrice(original, currentMode);
+        const formatted = formatPrice(original);
         if (formatted === nm[1]) return match;
         hasChange = true;
-        originalMatches.push(match.trim());
         return match.replace(nm[1], formatted);
       });
       if (hasChange && next !== text) {
         log(text.trim(), '→', next.trim());
-        const parentEl = (node.parentElement && node.parentElement !== document.body) ? node.parentElement : null;
-        if (!trackedSingleNodes.has(node)) {
-          trackedSingleNodes.set(node, { originalText: text, parentEl });
-        }
         node.nodeValue = next;
         seen.set(node, next);
         return;
@@ -441,43 +367,62 @@
     });
   }
 
-  // ─── Checkout & Cart Exclusion ───────────────────────────────────────────────
+  // ─── Checkout & Payment Exclusion (Only final payment steps) ─────────────
   function isCheckoutOrCartPage() {
     if (typeof window === 'undefined' || !window.location) return false;
     const url = window.location.href.toLowerCase();
     const pathname = window.location.pathname.toLowerCase();
     const hostname = window.location.hostname.toLowerCase();
 
-    // Never disable on Google search pages (e.g. searching 'buy shoes')
+    // Never disable on Google search results
     if (hostname.includes('google.') && pathname.startsWith('/search')) {
       return false;
     }
 
+    // Exclude only final payment steps, NOT the cart!
     const checkoutPatterns = [
-      '/checkout', '/cart', '/basket', '/billing', '/payment',
-      'checkout.', 'cart.', 'action=checkout', 'step=checkout', 'view=cart'
+      '/checkout', '/payment', '/billing', '/pay/', 'step=payment', 'action=payment', 'pay.google.com'
     ];
     return checkoutPatterns.some(pattern => url.includes(pattern));
   }
 
-  // ─── Shopping Site & Product Search Strategy ─────────────────────────────────
+  // ─── Shopping Site & Product Detection Strategy ──────────────────────────────
+  let isShoppingSiteVerified = false;
+
   function isShoppingPage() {
+    if (isShoppingSiteVerified) return true;
     if (typeof window === 'undefined' || !window.location) return false;
+
+    const href = window.location.href.toLowerCase();
     const hostname = window.location.hostname.toLowerCase();
     const pathname = window.location.pathname.toLowerCase();
-    const href = window.location.href.toLowerCase();
 
     // 0. Local test harness support (file:// or localhost test_page.html)
     if (!hostname || hostname === 'localhost' || hostname === '127.0.0.1' || href.startsWith('file:')) {
+      isShoppingSiteVerified = true;
       return true;
     }
 
-    // 1. Google: only valid on search / shopping
+    // 1. Google search / shopping with product cards
     if (hostname.includes('google.')) {
-      return pathname.startsWith('/search') || pathname.startsWith('/shopping') || pathname.includes('shopping');
+      if (document.querySelector(GOOGLE_PRODUCT_CARD_SELECTOR) || pathname.startsWith('/search') || pathname.startsWith('/shopping')) {
+        isShoppingSiteVerified = true;
+        return true;
+      }
+      return false;
     }
 
-    // 2. Well-known e-commerce & retail marketplaces / brand stores
+    // 2. Shopping keywords in URL (e.g. shop, cart, store, buy, product, item, deal, sale, etc.)
+    const URL_KEYWORDS = [
+      'shop', 'cart', 'store', 'buy', 'product', 'item', 'order',
+      'deal', 'sale', 'bazaar', 'mall', 'mart', 'catalog', 'collection', 'goods', 'price'
+    ];
+    if (URL_KEYWORDS.some(kw => href.includes(kw))) {
+      isShoppingSiteVerified = true;
+      return true;
+    }
+
+    // 3. Known e-commerce & retail marketplaces / brand stores
     const SHOPPING_DOMAINS = [
       'amazon.', 'flipkart.com', 'myntra.com', 'meesho.com', 'ajio.com',
       'nykaa.com', 'tatacliq.com', 'reliancedigital.in', 'croma.com',
@@ -489,145 +434,104 @@
       'swiggy.com', 'zomato.com', 'shopify.com', 'myshopify.com'
     ];
     if (SHOPPING_DOMAINS.some(domain => hostname.includes(domain))) {
+      isShoppingSiteVerified = true;
       return true;
     }
 
-    // 3. Product URL Keyword Strategy:
-    // Path indicates product detail page, product listing, catalog or shop
-    const PRODUCT_URL_PATTERNS = [
-      '/product/', '/products/', '/p/', '/dp/', '/gp/product/',
-      '/item/', '/items/', '/catalog/', '/goods/', '/buy/',
-      '/shop/', '/store/', '/collection/', '/collections/'
+    // 4. Shopping buttons or elements on the page (cart, buy, bag, order buttons)
+    if (document.querySelector(
+      '[id*="cart" i], [class*="cart" i], [id*="buy" i], [class*="buy" i], [id*="bag" i], [class*="bag" i], [aria-label*="cart" i], [aria-label*="bag" i], [data-testid*="cart" i], [data-testid*="buy" i]'
+    )) {
+      isShoppingSiteVerified = true;
+      return true;
+    }
+
+    // 5. Page content shopping keywords
+    const bodyText = (document.body ? document.body.innerText || document.body.textContent || '' : '').slice(0, 20000).toLowerCase();
+    const CONTENT_KEYWORDS = [
+      'add to cart', 'buy now', 'shopping cart', 'in stock', 'out of stock',
+      'add to bag', 'shopping bag', 'free delivery', 'order now', 'm.r.p', 'mrp:'
     ];
-    if (PRODUCT_URL_PATTERNS.some(pat => pathname.includes(pat))) {
+    if (CONTENT_KEYWORDS.some(kw => bodyText.includes(kw))) {
+      isShoppingSiteVerified = true;
       return true;
     }
 
-    // 4. Schema.org / OpenGraph / Semantic Product Metadata Strategy:
+    // 6. Meta / Schema tags
     if (document.querySelector('meta[property="og:type"][content*="product"], meta[property="product:price:amount"], meta[itemprop="price"], meta[property="og:price:amount"]')) {
-      return true;
-    }
-
-    const ldScripts = document.querySelectorAll('script[type="application/ld+json"]');
-    for (let i = 0; i < Math.min(ldScripts.length, 5); i++) {
-      const text = ldScripts[i].textContent || '';
-      if (text.includes('"Product"') || text.includes('"Offer"') || text.includes('"ItemPage"')) {
-        return true;
-      }
-    }
-
-    // 5. Add to Cart / Buy Now button presence
-    if (document.querySelector('[id*="add-to-cart"], [class*="add-to-cart"], [id*="buy-now"], [class*="buy-now"], [id*="addToCart"], [class*="addToCart"]')) {
+      isShoppingSiteVerified = true;
       return true;
     }
 
     return false;
   }
 
-  // ─── Init ─────────────────────────────────────────────────────────────────────
-  function init() {
-    log('init with mode:', currentMode);
-    walk(document.body);
-    observe();
-
-    // Catch lazy-loaded prices (Google shopping carousel, Flipkart, Amazon, etc.)
-    setTimeout(() => walk(document.body), 800);
-    setTimeout(() => walk(document.body), 2000);
-    setTimeout(() => walk(document.body), 5000);
+  // ─── Execution Runner ────────────────────────────────────────────────────────
+  function checkAndWalk() {
+    if (isCheckoutOrCartPage()) return;
+    if (isShoppingPage()) {
+      walk(document.body);
+    }
   }
 
-  // Load mode from storage & set up listeners
-  function start() {
-    // 1. Only run on shopping sites / product pages / Google shopping searches
-    if (!isShoppingPage()) {
-      log('PriceRounder: Not a shopping site or product search page. Skipping.');
-      return;
-    }
+  // ─── Init ─────────────────────────────────────────────────────────────────────
+  function init() {
+    log('CleanPrice initialized — Auto-Round Active');
+    checkAndWalk();
+    observe();
 
-    // 2. Exclude checkout/cart/payment pages
-    if (isCheckoutOrCartPage()) {
-      log('PriceRounder: Disabled on checkout/cart pages to preserve exact amounts.');
-      return;
-    }
-
-    const storage = typeof chrome !== 'undefined' && chrome.storage && (chrome.storage.sync || chrome.storage.local);
-    if (storage) {
-      storage.get({ priceRounderMode: 'round' }, (result) => {
-        currentMode = result.priceRounderMode || 'round';
-        init();
-      });
-    } else {
-      init();
-    }
-
-    // Listen for storage changes across tabs
-    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged) {
-      chrome.storage.onChanged.addListener((changes) => {
-        if (changes.priceRounderMode) {
-          applyMode(changes.priceRounderMode.newValue);
-        }
-      });
-    }
-
-    // Listen for direct messages from popup
-    if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
-      chrome.runtime.onMessage.addListener((msg) => {
-        if (msg.action === 'UPDATE_PRICE_MODE') {
-          applyMode(msg.mode);
-        }
-      });
-    }
+    // Re-check periodically for lazy-loaded content or dynamically rendered shopping elements
+    setTimeout(checkAndWalk, 400);
+    setTimeout(checkAndWalk, 1200);
+    setTimeout(checkAndWalk, 2500);
+    setTimeout(checkAndWalk, 5000);
   }
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', start);
+    document.addEventListener('DOMContentLoaded', init);
   } else {
-    start();
+    init();
   }
 
   // ─── Console test harness: call window.__INRRounder.test() ───────────────────
   function test() {
     const cases = [
-      '₹1,234.50',          // Round: ₹1,200 | Round++: ₹1.2k
-      '₹999',               // Round: ₹1,000 | Round++: ₹1k
-      '₹49',                // Round: ₹50    | Round++: ₹50
-      '₹7.5',               // Round: ₹8     | Round++: ₹8
-      'Rs.1,23,456',        // Round: Rs.1,23,000 | Round++: Rs.1.2L
-      '24,999 INR',         // Round: 25,000 INR  | Round++: 25k INR
-      '₹ 1,19,990',         // Round: ₹ 1,20,000  | Round++: ₹ 1.2L
-      '₹ 2,899',            // Round: ₹ 2,900     | Round++: ₹ 2.9k
-      '₹0.99',              // Round: ₹1     | Round++: ₹1
+      '₹1,234.50',          // ₹1,200
+      '₹999',               // ₹1,000
+      '₹49',                // ₹50
+      '₹7.5',               // ₹8
+      'Rs.1,23,456',        // Rs.1,23,000
+      '24,999 INR',         // 25,000 INR
+      '₹ 1,19,990',         // ₹ 1,20,000
+      '₹ 2,899',            // ₹ 2,900
+      '₹0.99',              // ₹1
       'version v1.2.3',     // no change
       'park / kr / word',   // no change
     ];
 
-    ['round', 'round_plus'].forEach((m) => {
-      console.group(`[INRRounder] Tests (${m} mode)`);
-      for (const c of cases) {
-        INR_RE.lastIndex = 0;
-        const out = c.replace(INR_RE, (match) => {
-          const nm = match.match(NUM_RE);
-          if (!nm) return match;
-          const n = parseINR(nm[1]);
-          if (isNaN(n) || n === 0) return match;
-          const formatted = formatPrice(n, m);
-          return formatted === nm[1] ? match : match.replace(nm[1], formatted);
-        });
-        console.log(c === out ? '  (no change)' : `  ✓`, c, '→', out);
-      }
-      console.groupEnd();
-    });
+    console.group('[CleanPrice] Auto-Round Tests');
+    for (const c of cases) {
+      INR_RE.lastIndex = 0;
+      const out = c.replace(INR_RE, (match) => {
+        const nm = match.match(NUM_RE);
+        if (!nm) return match;
+        const n = parseINR(nm[1]);
+        if (isNaN(n) || n === 0) return match;
+        const formatted = formatPrice(n);
+        return formatted === nm[1] ? match : match.replace(nm[1], formatted);
+      });
+      console.log(c === out ? '  (no change)' : `  ✓`, c, '→', out);
+    }
+    console.groupEnd();
   }
 
-  window.__INRRounder = {
+  window.__CleanPrice = {
     test,
     parseINR,
     smartRound,
     formatINR,
-    formatCompactINR,
     formatPrice,
-    getMode: () => currentMode,
-    setMode: applyMode
+    isShoppingPage: () => isShoppingSiteVerified
   };
   log('loaded');
 })();

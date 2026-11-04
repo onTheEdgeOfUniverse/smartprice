@@ -2,11 +2,9 @@
   "manifest_version": 3,
   "name": "CleanPrice: Shopping Price Rounder",
   "short_name": "CleanPrice",
-  "version": "1.4",
+  "version": "1.5",
   "description": "Automatically rounds and simplifies complex product prices on Amazon, Flipkart, Google Shopping & e-commerce stores for effortless price comparison.",
-  "permissions": [
-    "storage"
-  ],
+  "permissions": [],
   "action": {
     "default_popup": "popup.html",
     "default_title": "CleanPrice: Shopping Price Rounder",
