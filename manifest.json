@@ -1,14 +1,15 @@
 {
   "manifest_version": 3,
-  "name": "SmartPrice Rounder",
+  "name": "CleanPrice: Shopping Price Rounder",
+  "short_name": "CleanPrice",
   "version": "1.4",
-  "description": "Automatically simplifies and rounds complex product prices on Google Shopping so you can compare costs at a glance.",
+  "description": "Automatically rounds and simplifies complex product prices on Amazon, Flipkart, Google Shopping & e-commerce stores for effortless price comparison.",
   "permissions": [
     "storage"
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "SmartPrice Rounder",
+    "default_title": "CleanPrice: Shopping Price Rounder",
     "default_icon": {
       "16": "icon16.png",
       "48": "icon48.png",
