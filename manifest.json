@@ -1,13 +1,13 @@
 {
   "manifest_version": 3,
-  "name": "CleanPrice: Shopping Price Rounder",
-  "short_name": "CleanPrice",
+  "name": "RoundFigure: Shopping Price Rounder",
+  "short_name": "RoundFigure",
   "version": "1.7",
   "description": "Automatically rounds product prices on Amazon, Flipkart, and shopping sites to clean whole numbers for easier price comparison.",
   "permissions": [],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "CleanPrice: Shopping Price Rounder",
+    "default_title": "RoundFigure: Shopping Price Rounder",
     "default_icon": {
       "16": "icon16.png",
       "48": "icon48.png",

@@ -1,10 +1,10 @@
-# CleanPrice: Shopping Price Rounder
+# RoundFigure: Shopping Price Rounder
 
 A lightweight Google Chrome Extension (Manifest V3) that counters deceptive psychological pricing (.99, 999) on e-commerce shopping websites by automatically rounding and simplifying product prices into cleaner, human-friendly formats.
 
 ## Features & Automatic Rounding
 
-CleanPrice automatically rounds prices on e-commerce shopping websites to the nearest readable whole number:
+RoundFigure automatically rounds prices on e-commerce shopping websites to the nearest readable whole number:
 - **Automatic & Instant**: No configuration or mode switching required. Works out of the box.
 - **Tiered Smart Rounding**:
   - `₹2,899` → `₹2,900`
@@ -24,4 +24,5 @@ CleanPrice automatically rounds prices on e-commerce shopping websites to the ne
 2. Enable **Developer mode** using the toggle in the top-right corner.
 3. Click **Load unpacked** and select this directory.
 4. Open [test_page.html](test_page.html) or any e-commerce website (e.g., Amazon.in, Flipkart, Google Shopping).
-5. Click the CleanPrice extension icon in the toolbar to toggle between **Round** and **Round++**!
+5. The extension automatically detects shopping sites and rounds prices without any manual setup!
+
